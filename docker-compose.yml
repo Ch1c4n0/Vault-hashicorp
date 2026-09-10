@@ -19,5 +19,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # Destrava o Vault automaticamente sempre que o container "vault" (re)inicia,
+  # usando as 3 chaves guardadas no arquivo .env (nao versionado). Veja a
+  # secao 3.4 do README.md.
+  vault-unseal:
+    image: hashicorp/vault:1.18
+    container_name: local-vault-unseal
+    restart: unless-stopped
+    depends_on:
+      - vault
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_UNSEAL_KEY_1: ${VAULT_UNSEAL_KEY_1:?defina VAULT_UNSEAL_KEY_1 no arquivo .env (veja .env.example)}
+      VAULT_UNSEAL_KEY_2: ${VAULT_UNSEAL_KEY_2:?defina VAULT_UNSEAL_KEY_2 no arquivo .env (veja .env.example)}
+      VAULT_UNSEAL_KEY_3: ${VAULT_UNSEAL_KEY_3:?defina VAULT_UNSEAL_KEY_3 no arquivo .env (veja .env.example)}
+    entrypoint: ["/bin/sh", "/unseal.sh"]
+    volumes:
+      - ./unseal.sh:/unseal.sh:ro
+
 volumes:
   vault-data:

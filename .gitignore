@@ -1,4 +1,6 @@
 key.txt
 guia-policy.txt
+auto-seal.txt
 *.env
 .env
+!.env.example

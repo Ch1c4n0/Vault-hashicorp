@@ -11,6 +11,7 @@ Este guia foi escrito passo a passo, com uma ação por linha, para ser fácil d
 1. [Antes de começar](#1-antes-de-começar)
 2. [Iniciar o Vault](#2-iniciar-o-vault)
 3. [Inicializar e destravar (unseal)](#3-inicializar-e-destravar-unseal)
+   - [3.4 Destravar automaticamente](#34-destravar-automaticamente-não-digitar-as-3-chaves-toda-vez)
 4. [Ativar o cofre de senhas (KV)](#4-ativar-o-cofre-de-senhas-kv)
 5. [Guardar e ler senhas](#5-guardar-e-ler-senhas)
 6. [Dar acesso a uma APLICAÇÃO (menor privilégio)](#6-dar-acesso-a-uma-aplicação-menor-privilégio)
@@ -87,6 +88,45 @@ O campo `Sealed` deve estar `false`.
 1. Abra `http://localhost:8200`.
 2. Cole uma **Unseal Key** por vez, no campo indicado, e clique em **Unseal** — repita 3 vezes.
 3. Depois de destravado, escolha o método **Token**, cole o **Initial Root Token** e clique em **Sign In**.
+
+### 3.4 Destravar automaticamente (não digitar as 3 chaves toda vez)
+
+Se você reinicia o Docker com frequência e está cansado de repetir o passo 3.2 manualmente, este projeto já traz um segundo container — **`local-vault-unseal`** — que fica de olho no Vault e destrava sozinho sempre que ele estiver selado (depois de `docker restart`, reboot da máquina, `docker compose up` de novo, etc.).
+
+> Isso **não** é o "Auto Unseal" nativo do Vault (que usa um serviço de nuvem como Azure Key Vault/AWS KMS e elimina as Shamir Keys por completo). É um jeito prático de automatizar o mesmo passo manual, guardando as chaves em um arquivo local `.env` em vez de digitá-las. Veja o trade-off de segurança na seção 12.
+
+**Como ativar:**
+
+1. Copie o arquivo de exemplo:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+2. Abra o `.env` e cole as 3 Unseal Keys reais (as mesmas da seção 3.1):
+
+   ```env
+   VAULT_UNSEAL_KEY_1="cole a chave 1 aqui"
+   VAULT_UNSEAL_KEY_2="cole a chave 2 aqui"
+   VAULT_UNSEAL_KEY_3="cole a chave 3 aqui"
+   ```
+
+3. Suba a stack novamente:
+
+   ```powershell
+   docker compose up -d --build
+   ```
+
+4. Confirme que funcionou:
+
+   ```powershell
+   docker logs local-vault-unseal
+   docker exec local-vault vault status
+   ```
+
+   Nos logs deve aparecer `Vault destravado com sucesso.`, e o `status` deve mostrar `Sealed: false` — sem você ter digitado nada.
+
+O `.env` nunca é commitado (está no `.gitignore`). Se as chaves nele estiverem erradas ou vazias, o `docker compose up` já falha com um aviso claro (`defina VAULT_UNSEAL_KEY_1 no arquivo .env`), em vez de subir quebrado silenciosamente.
 
 ## 4. Ativar o cofre de senhas (KV)
 
@@ -313,7 +353,7 @@ Misturar os dois é o erro mais comum: `export` não existe no PowerShell, e `$e
 | `service "vault" is not running` | Comando `docker compose exec` rodado fora de `D:\Vault` | `cd D:\Vault` antes, ou use `docker exec local-vault ...` (seção 8) |
 | `403 permission denied` / `invalid token` | `VAULT_TOKEN` vazio, errado, ou com sintaxe do shell trocada | Confirme com `echo $env:VAULT_TOKEN` (PowerShell) e redefina; confira a seção 9 |
 | `Path can't be blank` (na web, ao criar secret) | Campo **Path** não preenchido | Digite um nome, ex.: `desenvolvimento` |
-| Comandos não fazem nada / tudo dá erro de conexão | Vault ainda **selado** após reiniciar o container | Rode `vault status`; se `Sealed: true`, destrave com 3 chaves (seção 3.2) |
+| Comandos não fazem nada / tudo dá erro de conexão | Vault ainda **selado** após reiniciar o container | Rode `vault status`; se `Sealed: true`, destrave com 3 chaves (seção 3.2) ou ative o auto-unseal (seção 3.4) |
 | `export: The term 'export' is not recognized...` | Comando de Bash digitado no PowerShell | Use `$env:VAULT_TOKEN = "valor"` (seção 9) |
 
 ## 11. Parar, reiniciar e limpar
@@ -330,7 +370,7 @@ Iniciar de novo:
 docker compose up -d
 ```
 
-Os dados ficam no volume Docker `vault-data` — sobrevivem ao `down`/`up`. Depois de reiniciar, o Vault pode voltar selado (seção 3.2).
+Os dados ficam no volume Docker `vault-data` — sobrevivem ao `down`/`up`. Depois de reiniciar, o Vault pode voltar selado (seção 3.2), ou já vir destravado sozinho se o auto-unseal (seção 3.4) estiver ativo.
 
 **Apagar tudo** (dados e segredos deste Vault local):
 
@@ -349,3 +389,4 @@ docker compose down -v
 - Use HTTPS/TLS antes de deixar o Vault acessível por outra máquina (esta configuração usa `tls_disable = true`, só para localhost).
 - Faça backup protegido do volume `/vault/data`.
 - Teste sempre primeiro com senhas descartáveis, nunca com credenciais reais de produção.
+- **Sobre o auto-unseal da seção 3.4:** ele guarda as 3 Unseal Keys em texto puro no arquivo `.env` local. Isso reduz a proteção que o esquema Shamir (3 de 5 chaves, guardadas separadamente) foi desenhado para dar — quem tiver acesso a esse `.env` já destrava o Vault sozinho. Para um ambiente que não seja só o seu laboratório local, prefira o **Auto Unseal nativo** do Vault com um serviço de nuvem (ex.: Azure Key Vault, AWS KMS), que elimina as Shamir Keys por completo em vez de só automatizar o envio delas.
